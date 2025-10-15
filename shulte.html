@@ -1,0 +1,453 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>舒尔特方格训练 — 最终版</title>
+<style>
+  :root{--cell-size:60px;--gap:10px}
+  *{box-sizing:border-box}
+  body{
+    margin:0;min-height:100vh;
+    display:flex;align-items:center;justify-content:center;
+    font-family:"Microsoft Yahei",Arial,Helvetica,sans-serif;
+    background:linear-gradient(135deg,#eef6ff,#ffffff);
+    padding:20px;
+  }
+  .wrap{width:100%;max-width:980px;text-align:center}
+  h1{margin:0 0 10px;color:#111;font-size:22px}
+  #top-stats{display:flex;gap:20px;justify-content:center;align-items:center;margin-bottom:12px;flex-wrap:wrap;color:#333}
+  .stat{font-size:15px}
+  #controls, #menu{margin-bottom:10px}
+  .btn{margin:6px;padding:8px 14px;background:#3b82f6;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px}
+  .btn.secondary{background:#6b7280}
+  .btn.ghost{background:transparent;color:#3b3b3b;border:1px solid #ddd}
+  .mode-select{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:8px}
+  #game-wrapper{display:flex;justify-content:center}
+  #game{display:grid;gap:var(--gap);justify-content:center;align-items:center}
+  .cell{
+    width:var(--cell-size);height:var(--cell-size);display:flex;align-items:center;justify-content:center;
+    background:#fff;border-radius:10px;font-size:20px;cursor:pointer;user-select:none;
+    box-shadow:0 4px 10px rgba(0,0,0,0.06);transition:transform .08s,background .12s;
+  }
+  .cell:active{transform:scale(.98)}
+  .cell.correct{background:#c6f6d5;color:#055;font-weight:700}
+  .cell.wrong{background:#ffd6d6;color:#900}
+  .cell.dim{opacity:.6}
+  #timer{margin-top:8px;font-weight:700;color:#333}
+  #result{margin-top:8px;min-height:22px;font-size:15px;color:#222}
+  #record-container{margin-top:18px;text-align:left;margin-left:auto;margin-right:auto;max-width:520px}
+  #record-container h3{margin:6px 0}
+  #record-list{list-style:none;padding:0;margin:0}
+  #record-list li{display:flex;justify-content:space-between;align-items:center;background:#fff;border-radius:8px;padding:8px 10px;margin:6px 0;box-shadow:0 3px 8px rgba(0,0,0,0.04);font-size:14px}
+  .record-meta{color:#333}
+  .del{background:#ef4444;border:none;color:#fff;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:12px}
+  .rating-good{color:#16a34a;font-weight:700}
+  .rating-mid{color:#f59e0b;font-weight:700}
+  .rating-bad{color:#ef4444;font-weight:700}
+  .small{font-size:13px;color:#666}
+  .grid-opts{display:flex;gap:8px;align-items:center;justify-content:center;flex-wrap:wrap;margin-top:6px}
+  .checkbox{display:inline-flex;align-items:center;gap:6px}
+  .divider{height:1px;background:#eee;margin:12px 0}
+  /* responsive */
+  @media(max-width:600px){
+    :root{--cell-size:46px;--gap:8px}
+    h1{font-size:18px}
+    .btn{padding:7px 10px;font-size:13px}
+    #record-container{max-width:95%}
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>舒尔特方格训练（最终版）</h1>
+
+    <div id="top-stats">
+      <div class="stat">🏆 本模式最佳：<span id="best-all">-</span> 秒</div>
+      <div class="stat">📅 今日最佳：<span id="best-today">-</span> 秒</div>
+    </div>
+
+    <!-- 模式与挑战选择 -->
+    <div id="menu">
+      <div class="mode-select">
+        <button class="btn" data-mode="3x3" onclick="prepareMode('3x3')">3 × 3</button>
+        <button class="btn" data-mode="4x4" onclick="prepareMode('4x4')">4 × 4</button>
+        <button class="btn" data-mode="5x5" onclick="prepareMode('5x5')">5 × 5</button>
+        <button class="btn" data-mode="challenge" onclick="openChallenge()">挑战模式</button>
+      </div>
+      <div id="challenge-panel" style="display:none">
+        <div class="grid-opts">
+          <label class="checkbox"><input type="checkbox" id="opt-timed"> 限时（秒）<input id="opt-timed-sec" type="number" value="30" min="5" style="width:70px;margin-left:6px"/></label>
+          <label class="checkbox"><input type="checkbox" id="opt-colorful"> 随机颜色</label>
+          <label class="checkbox"><input type="checkbox" id="opt-flash"> 颜色闪烁（点错闪动）</label>
+          <label class="checkbox"><input type="checkbox" id="opt-distract"> 干扰（双倍数字 / 额外干扰）</label>
+        </div>
+        <div style="margin-top:8px">
+          <button class="btn" onclick="prepareMode('challenge')">开始挑战（使用所选项）</button>
+          <button class="btn secondary" onclick="closeChallengePanel()">取消</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="controls" style="display:none">
+      <button class="btn" onclick="resetGrid()">重置</button>
+      <button class="btn secondary" onclick="goBack()">重选</button>
+    </div>
+
+    <div id="timer" class="small"></div>
+    <div id="game-wrapper"><div id="game" aria-live="polite"></div></div>
+    <div id="result"></div>
+
+    <div class="divider"></div>
+
+    <div id="record-container">
+      <h3>📜 成绩记录（当前显示：<span id="current-mode-label">-</span>）</h3>
+      <div class="small">排行榜按模式独立存储；可删除任意条目。</div>
+      <ul id="record-list"></ul>
+    </div>
+<!-- ----------------- 开始：页脚（测试版本 / 联系方式 / 作者） ----------------- -->
+	<footer id="site-footer" style="margin-top:18px;padding:12px 0;background:transparent;">
+  		<div style="max-width:920px;margin:0 auto;text-align:center;color:#666;font-size:13px;">
+    <div>⚠️ 本网站为测试版本，如有建议和需求，请私信谷歌邮箱：<a href="mailto:xiuyangmc@gmail.com">xiuyangmc@gmail.com</a>，或 QQ：<strong>3973017100</strong></div>
+    		<div style="margin-top:6px">作者：<strong>Mr_Sheepverse</strong></div>
+  			</div>
+				</footer>
+<!-- ----------------- 结束：页脚 ----------------- -->
+  </div>
+
+<script>
+/* =================  状态与存储  ================= */
+let mode = null;                 // '3x3','4x4','5x5','challenge'
+let size = 0;
+let seqCurrent = 1;              // 当前应点数字
+let startTs = 0;
+let running = false;
+let timerInterval = null;
+let limitRemain = 0;
+const STORAGE_KEY = 'sg_leaderboards_v2'; // 存储所有模式的排行榜
+// 初始化 leaderboards 结构（每个模式是数组）
+const defaultBoards = { '3x3':[], '4x4':[], '5x5':[], 'challenge':[] };
+let leaderboards = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null') || defaultBoards;
+
+/* 每模式的成绩阈值（秒）: [优秀, 良好, 一般] */
+const thresholds = {
+  '3x3': [2.5, 4.0, 6.0],
+  '4x4': [6.0, 10.0, 15.0],
+  '5x5': [12.0, 18.0, 26.0],
+  'challenge': [8.0, 14.0, 22.0]
+};
+
+/* =============== UI/准备模式 =============== */
+function prepareMode(m){
+  mode = m;
+  // 设置尺寸
+  if(m === '3x3') size = 3;
+  else if(m === '4x4') size = 4;
+  else if(m === '5x5') size = 5;
+  else if(m === 'challenge'){ 
+    // 在挑战模式中，可以按默认 size 5 或可根据选项设置
+    size = 5;
+    // apply challenge options from checkboxes: already read in startGame
+  }
+  document.getElementById('menu').style.display = 'none';
+  document.getElementById('challenge-panel').style.display = 'none';
+  document.getElementById('controls').style.display = 'block';
+  document.getElementById('current-mode-label').textContent = mode;
+  document.getElementById('result').textContent = '';
+  document.getElementById('timer').textContent = '';
+  seqCurrent = 1;
+  running = false;
+  startTs = 0;
+  clearInterval(timerInterval);
+  // generate grid using options for challenge
+  generateGrid();
+  updateTopStats();
+  renderRecords();
+}
+
+/* challenge panel open/close */
+function openChallenge(){
+  document.getElementById('challenge-panel').style.display = 'block';
+}
+function closeChallengePanel(){
+  document.getElementById('challenge-panel').style.display = 'none';
+}
+
+/* =============== 生成/重置 格子 =============== */
+function generateGrid(){
+  const game = document.getElementById('game');
+  game.innerHTML = '';
+  const total = size * size;
+  // base numbers
+  let nums = Array.from({length:total}, (_,i)=>i+1);
+  // 若 challenge 干扰选项开启，可能增加干扰元素（例如重复数字混淆位置）
+  const useDistract = (mode === 'challenge') && document.getElementById('opt-distract') && document.getElementById('opt-distract').checked;
+  if(useDistract){
+    // 随机替换少数格为随机两位数（干扰视觉）或重复数
+    // 但为了计数逻辑仍然以 1..n 判断（干扰只改变展示文本）
+  }
+
+  // 洗牌
+  for(let i=nums.length-1;i>0;i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [nums[i], nums[j]] = [nums[j], nums[i]];
+  }
+
+  // grid 列数
+  document.getElementById('game').style.gridTemplateColumns = `repeat(${size}, var(--cell-size))`;
+
+  // 若 challenge 并选了随机颜色，则每个格子赋初始颜色
+  const useColorful = (mode === 'challenge') && document.getElementById('opt-colorful') && document.getElementById('opt-colorful').checked;
+  const useFlash = (mode === 'challenge') && document.getElementById('opt-flash') && document.getElementById('opt-flash').checked;
+
+  for(let k=0;k<nums.length;k++){
+    const n = nums[k];
+    const cell = document.createElement('div');
+    cell.className = 'cell';
+    // 可能干扰：展示文本不同于内部数字（但内部判断仍用 data-num）
+    let displayText = String(n);
+    if(useDistract && Math.random() < 0.15){
+      // 15% 概率显示双位数干扰
+      displayText = String(n + (Math.random() < 0.5 ? 10 : -1));
+    }
+    cell.textContent = displayText;
+    // 存储内部真实数字
+    cell.dataset.num = n;
+    // 随机颜色:
+    if(useColorful){
+      cell.style.background = randomColor();
+    }
+    // 点击处理
+    cell.addEventListener('click', ()=>onCellClick(cell));
+    game.appendChild(cell);
+  }
+  // reset state
+  seqCurrent = 1;
+  running = false;
+  startTs = 0;
+  clearInterval(timerInterval);
+  document.getElementById('timer').textContent = '';
+  document.getElementById('result').textContent = '点击数字 1 开始计时';
+}
+
+/* 彻底重置（用户点击 Reset）——修复你遇到的 bug */
+function resetGrid(){
+  // 保证所有状态重置，重建格子
+  seqCurrent = 1;
+  running = false;
+  startTs = 0;
+  clearInterval(timerInterval);
+  document.getElementById('timer').textContent = '';
+  document.getElementById('result').textContent = '已重置：点击 1 开始';
+  // 重新生成格子（保持当前模式与选项）
+  generateGrid();
+}
+
+/* 返回主菜单 */
+function goBack(){
+  mode = null;
+  size = 0;
+  seqCurrent = 1;
+  running = false;
+  clearInterval(timerInterval);
+  document.getElementById('menu').style.display = 'block';
+  document.getElementById('challenge-panel').style.display = 'none';
+  document.getElementById('controls').style.display = 'none';
+  document.getElementById('game').innerHTML = '';
+  document.getElementById('timer').textContent = '';
+  document.getElementById('result').textContent = '';
+  document.getElementById('current-mode-label').textContent = '-';
+  renderRecords(); // show default
+  updateTopStats();
+}
+
+/* =============== 点击逻辑 =============== */
+function onCellClick(cell){
+  const num = Number(cell.dataset.num);
+  // If already correct, ignore
+  if(cell.classList.contains('correct')) return;
+
+  // First click to start timer
+  if(!running){
+    // if clicked not 1 at the very start, flash wrong but don't start timer
+    if(num !== 1){
+      flashWrong(cell);
+      return;
+    }
+    running = true;
+    startTs = Date.now();
+    // If challenge chosen and timed option set, start countdown accordingly
+    if(mode === 'challenge' && document.getElementById('opt-timed') && document.getElementById('opt-timed').checked){
+      const s = parseInt(document.getElementById('opt-timed-sec').value) || 30;
+      startCountdown(s);
+    }
+    // If mode normal with limit? (not by default)
+  }
+
+  // Correct?
+  if(num === seqCurrent){
+    cell.classList.add('correct');
+    // 若为 challenge 且有闪动效果，清除该格的闪动（如果存在）
+    seqCurrent++;
+    // 完成条件
+    if(seqCurrent > size*size){
+      // finished
+      const total = ((Date.now() - startTs)/1000).toFixed(2);
+      finishAttempt(parseFloat(total));
+    }
+  } else {
+    // wrong
+    flashWrong(cell);
+  }
+}
+
+/* 错误短暂反馈（如果 challenge flash option 打开，则全局闪动色） */
+function flashWrong(cell){
+  const useFlash = (mode === 'challenge') && document.getElementById('opt-flash') && document.getElementById('opt-flash').checked;
+  if(useFlash){
+    // 全部格子短时闪红
+    const cells = document.querySelectorAll('#game .cell');
+    cells.forEach(c=>c.classList.add('wrong'));
+    setTimeout(()=>cells.forEach(c=>c.classList.remove('wrong')), 200);
+  } else {
+    cell.classList.add('wrong');
+    setTimeout(()=>cell.classList.remove('wrong'), 120);
+  }
+}
+
+/* =============== 计时/结束保存 =============== */
+function startCountdown(sec){
+  clearInterval(timerInterval);
+  limitRemain = sec;
+  const el = document.getElementById('timer');
+  el.textContent = `⏰ 剩余：${limitRemain}s`;
+  timerInterval = setInterval(()=>{
+    limitRemain--;
+    if(limitRemain <= 0){
+      clearInterval(timerInterval);
+      el.textContent = '⏰ 时间到';
+      // 任务失败，回到菜单或重置? 我们直接提示并重置当前界面（不保存）
+      alert('挑战限时到，结束本次挑战（未计入成绩）');
+      goBack();
+    } else {
+      el.textContent = `⏰ 剩余：${limitRemain}s`;
+    }
+  },1000);
+}
+
+function finishAttempt(total){
+  clearInterval(timerInterval);
+  running = false;
+  document.getElementById('timer').textContent = '';
+  const rating = evaluate(mode, total);
+  const color = rating.color;
+  document.getElementById('result').innerHTML = `✅ 完成：<strong>${total.toFixed(2)}</strong> 秒  <span style="color:${color};font-weight:700">${rating.text}</span>`;
+  // 保存记录（按模式单独存）
+  saveRecord(mode, total);
+  renderRecords();
+  updateTopStats();
+}
+
+/* =============== 评级（不同模式不同阈值） =============== */
+function evaluate(m, t){
+  const th = thresholds[m] || thresholds['challenge'];
+  if(t <= th[0]) return {text:'优秀', color:'#16a34a'};
+  if(t <= th[1]) return {text:'良好', color:'#0ea5e9'};
+  if(t <= th[2]) return {text:'一般', color:'#f59e0b'};
+  return {text:'还需努力', color:'#ef4444'};
+}
+
+/* =============== 记录存储（按模式） =============== */
+function saveRecord(m, time){
+  const rec = { time: parseFloat(time.toFixed(2)), date: new Date().toLocaleDateString(), ts: Date.now() };
+  if(!leaderboards[m]) leaderboards[m] = [];
+  leaderboards[m].push(rec);
+  persist();
+}
+
+/* 删除记录（指定模式和 ts 或索引） */
+function deleteRecordByIdx(m, idx){
+  if(!leaderboards[m]) return;
+  if(!confirm('确认删除该条记录？')) return;
+  leaderboards[m].splice(idx,1);
+  persist();
+  renderRecords();
+  updateTopStats();
+}
+
+/* 存到 localStorage */
+function persist(){
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(leaderboards));
+}
+
+/* =============== 排行与记录显示 =============== */
+function renderRecords(){
+  const list = document.getElementById('record-list');
+  list.innerHTML = '';
+  if(!mode){
+    list.innerHTML = '<li style="background:transparent;color:#666">请先选择模式或进入挑战以查看对应排行。</li>';
+    return;
+  }
+  const records = (leaderboards[mode] || []).slice().sort((a,b)=>a.time - b.time);
+  if(records.length === 0){
+    list.innerHTML = '<li style="background:transparent;color:#666">暂无记录，完成一次训练后会显示在这里。</li>';
+    return;
+  }
+  records.forEach((r,i)=>{
+    const li = document.createElement('li');
+    const left = document.createElement('div');
+    left.className = 'record-meta';
+    // 等级显示
+    const rating = evaluate(mode, r.time);
+    left.innerHTML = `<div><strong>${r.time.toFixed(2)}s</strong>  <span style="color:${rating.color};font-weight:700">${rating.text}</span></div><div class="small">${r.date}</div>`;
+    const right = document.createElement('div');
+    const del = document.createElement('button');
+    del.className = 'del';
+    del.textContent = '删除';
+    del.onclick = ()=> deleteRecordByIdx(mode, findRecordIndex(mode, r.ts));
+    right.appendChild(del);
+    li.appendChild(left); li.appendChild(right);
+    list.appendChild(li);
+  });
+}
+
+/* 找到记录在原数组的下标（根据 ts） */
+function findRecordIndex(m, ts){
+  if(!leaderboards[m]) return -1;
+  return leaderboards[m].findIndex(x=>x.ts === ts);
+}
+
+/* =============== 置顶统计（本模式最佳 / 今日最佳） =============== */
+function updateTopStats(){
+  if(!mode){
+    document.getElementById('best-all').textContent = '-';
+    document.getElementById('best-today').textContent = '-';
+    return;
+  }
+  const arr = leaderboards[mode] || [];
+  if(arr.length === 0){
+    document.getElementById('best-all').textContent = '-';
+    document.getElementById('best-today').textContent = '-';
+    return;
+  }
+  const allBest = Math.min(...arr.map(x=>x.time));
+  const today = new Date().toLocaleDateString();
+  const todayArr = arr.filter(x=>x.date === today);
+  const todayBest = todayArr.length ? Math.min(...todayArr.map(x=>x.time)) : '-';
+  document.getElementById('best-all').textContent = allBest.toFixed(2);
+  document.getElementById('best-today').textContent = todayBest === '-' ? '-' : todayBest.toFixed(2);
+}
+
+/* =============== 辅助函数 =============== */
+function randomColor(){
+  const cs = ['#ffcccc','#ccffcc','#ccccff','#fff0b3','#ffd1dc','#e6f7ff','#e0ffe6'];
+  return cs[Math.floor(Math.random()*cs.length)];
+}
+
+/* 初始化页面：显示默认（未选模式） */
+renderRecords();
+updateTopStats();
+
+</script>
+</body>
+</html>
